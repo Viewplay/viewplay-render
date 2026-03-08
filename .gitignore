@@ -1,0 +1,11 @@
+﻿# dependencies
+server/node_modules/
+
+# local database files
+server/vp.sqlite
+server/vp.sqlite-*
+server/*.sqlite
+server/*.sqlite-*
+
+# logs
+npm-debug.log*
