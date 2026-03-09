@@ -124,6 +124,21 @@ app.get("/me", auth, (req, res) => {
   res.json({ userId: req.userId, earnUnits: bal ? Number(bal.earn_units) : 0 });
 });
 
+// ✅ NEW: list watched videos for this user (server-side)
+app.get("/watched", auth, (req, res) => {
+  const userId = req.userId;
+
+  const rows = db.prepare(
+    `SELECT DISTINCT video_id AS videoId
+     FROM events
+     WHERE user_id = ?
+       AND type = 'video_completed'
+       AND video_id IS NOT NULL`
+  ).all(userId);
+
+  res.json({ items: rows.map((r) => String(r.videoId)) });
+});
+
 app.post("/events", auth, (req, res) => {
   const userId = req.userId;
   const type = String(req.body?.type || "").trim();
@@ -221,5 +236,5 @@ app.get("/history", auth, (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`ViewPlay API running on http://localhost:${PORT}`);
+  console.log(ViewPlay API running on http://localhost:${PORT});
 });
