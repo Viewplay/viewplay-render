@@ -236,5 +236,6 @@ app.get("/history", auth, (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(ViewPlay API running on http://localhost:${PORT});
+  // ✅ FIX: must be a string (template literal), otherwise Render crashes
+  console.log('ViewPlay API running on http://localhost:${PORT}');
 });
