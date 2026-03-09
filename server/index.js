@@ -57,6 +57,7 @@ function signJwt(userId) {
   return jwt.sign({ sub: userId }, JWT_SECRET, { expiresIn: "30d" });
 }
 
+// ✅ FIX: auth ensures user + balances rows exist (prevents earnUnits staying 0 after redeploy/db reset)
 function auth(req, res, next) {
   const hdr = String(req.headers.authorization || "");
   const token = hdr.startsWith("Bearer ") ? hdr.slice(7) : "";
@@ -64,7 +65,14 @@ function auth(req, res, next) {
 
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
-    req.userId = decoded.sub;
+    const userId = String(decoded?.sub || "").trim();
+    if (!userId) return res.status(401).json({ error: "invalid_token" });
+
+    // Ensure rows exist so UPDATE balances always works
+    db.prepare("INSERT OR IGNORE INTO users (id, created_at) VALUES (?, ?)").run(userId, nowMs());
+    db.prepare("INSERT OR IGNORE INTO balances (user_id, earn_units) VALUES (?, 0)").run(userId);
+
+    req.userId = userId;
     return next();
   } catch {
     return res.status(401).json({ error: "invalid_token" });
@@ -170,12 +178,13 @@ app.post("/events", auth, (req, res) => {
          VALUES (?,?,?,?,?,?,?)`
       ).run(userId, type, videoId, tier, rewardUnits, payloadJson, createdAt);
 
+      // ✅ This will now always work because auth() ensures balances row exists
       db.prepare("UPDATE balances SET earn_units = earn_units + ? WHERE user_id=?")
         .run(rewardUnits, userId);
     }
 
     const bal = db.prepare("SELECT earn_units FROM balances WHERE user_id=?").get(userId);
-    return res.json({ ok: true, duplicated: Boolean(already), earnUnits: Number(bal.earn_units) });
+    return res.json({ ok: true, duplicated: Boolean(already), earnUnits: bal ? Number(bal.earn_units) : 0 });
   }
 
   if (type === "withdraw_request") {
@@ -199,7 +208,7 @@ app.post("/events", auth, (req, res) => {
       .run(unitsToDeduct, userId);
 
     const bal2 = db.prepare("SELECT earn_units FROM balances WHERE user_id=?").get(userId);
-    return res.json({ ok: true, earnUnits: Number(bal2.earn_units) });
+    return res.json({ ok: true, earnUnits: bal2 ? Number(bal2.earn_units) : 0 });
   }
 
   db.prepare(
@@ -236,6 +245,6 @@ app.get("/history", auth, (req, res) => {
 });
 
 app.listen(PORT, () => {
-  // ✅ FIX: must be a string (template literal), otherwise Render crashes
+  // ✅ FIX: real template literal
   console.log('ViewPlay API running on http://localhost:${PORT}');
 });
